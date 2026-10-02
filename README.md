@@ -1,59 +1,285 @@
 # Commonplace
 
-A real-time collaborative workspace for teams, with a Next.js client and an Express, Prisma, PostgreSQL, Redis, and Socket.IO API.
+Commonplace is a real-time collaborative workspace application built with Next.js on the frontend and an Express + Prisma + PostgreSQL + Redis + Socket.IO API on the backend.
 
-## Local setup
+It supports:
+- Workspace creation and member management
+- Board, list, and task workflows
+- Role-based permissions
+- Invitations and member onboarding
+- Search, activity feed, and filtered views
+- Real-time updates across clients through Socket.IO
 
-Requirements: Docker Desktop and Node.js 20+.
+---
 
-```sh
+## Project structure
+
+```text
+realtime-workspace/
+├── .env.example              # environment variable template
+├── .gitignore
+├── Dockerfile                # frontend image
+├── docker-compose.yml        # local Postgres + Redis + API + web services
+├── next.config.ts
+├── package.json              # frontend scripts and dependencies
+├── postcss.config.mjs
+├── tsconfig.json
+├── src/
+│   └── app/
+│       ├── globals.css
+│       ├── layout.tsx
+│       └── page.tsx         # main collaborative UI
+├── api/
+│   ├── Dockerfile
+│   ├── package.json          # API scripts and dependencies
+│   ├── prisma/
+│   │   ├── schema.prisma     # PostgreSQL schema and tenant model
+│   │   ├── seed.mjs          # demo user / workspace seeding
+│   │   └── migrations/
+│   └── src/
+│       ├── index.ts          # Express API + Socket.IO server
+│       ├── policy.ts         # role and permission logic
+│       ├── rank.ts           # fractional ordering for list/task ranks
+│       ├── integration.test.ts
+│       ├── socketRooms.ts    # board room join/leave logic
+│       └── socketRooms.test.ts
+└── README.md
+```
+
+---
+
+## Architecture
+
+### High-level flow
+
+```mermaid
+flowchart LR
+    A[Next.js Frontend] -->|HTTP + JWT| B[Express API]
+    A -->|Socket.IO| C[Realtime Board Events]
+    B --> D[Prisma ORM]
+    D --> E[PostgreSQL]
+    B --> F[Redis]
+    B --> G[BullMQ Worker]
+    C --> A
+```
+
+### Core components
+
+- Frontend: Next.js app renders the board UI and talks to the API through REST calls and Socket.IO events.
+- Backend API: Express server handles auth, workspaces, boards, permissions, lists, tasks, invite flows, search, and activity.
+- Database: PostgreSQL stores users, memberships, workspaces, boards, tasks, activity, and refresh sessions.
+- Redis: caches summary data and supports the background job queue.
+- Socket.IO: broadcasts board updates to all users connected to the same workspace/board room.
+
+### Security model
+
+- JWT access tokens expire in 15 minutes.
+- Refresh tokens are stored as hashes in an httpOnly cookie.
+- Role checks are enforced in the backend through a centralized policy layer.
+- Workspace and board access is scoped to authenticated membership.
+- Task/list update operations use optimistic version checks to reject stale edits with 409 responses.
+
+---
+
+## Tech stack
+
+- Next.js 16 + React 19 + TypeScript
+- Express 5 + Socket.IO
+- Prisma ORM with PostgreSQL
+- Redis and BullMQ
+- Docker Compose for local orchestration
+- Zod validation
+
+---
+
+## Installation
+
+### Prerequisites
+
+- Node.js 20+
+- Docker Desktop (recommended for local PostgreSQL and Redis)
+
+### 1) Configure environment variables
+
+Create a local environment file:
+
+```bash
 cp .env.example .env
+```
+
+Update the values as needed:
+
+```env
+DATABASE_URL=postgresql://workspace:workspace@localhost:5432/workspace?schema=public
+REDIS_URL=redis://localhost:6379
+ACCESS_TOKEN_SECRET=replace-this-with-a-random-secret-at-least-32-characters
+WEB_ORIGIN=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:4000
+SMTP_URL=
+SMTP_FROM=Commonplace <no-reply@example.com>
+DEMO_ACCOUNT_PASSWORD=
+```
+
+For local development, `ACCESS_TOKEN_SECRET` should be at least 32 characters long.
+
+### 2) Start the application with Docker
+
+```bash
 docker compose up --build
 ```
 
-Open `http://localhost:3000` and create an account. Signup creates a workspace, an Owner membership, a board, and its initial ordered lists. The API is available at `http://localhost:4000`; `GET /health` is the health check.
+This starts:
+- PostgreSQL on port 5432
+- Redis on port 6379
+- API on port 4000
+- Web app on port 3000
 
-To seed repeatable evaluation accounts and sample board tasks, set `DEMO_ACCOUNT_PASSWORD` in `.env` to a value of at least 12 characters and run `docker compose exec api npm run db:seed`. This creates `owner.demo@example.com` as Owner and `member.demo@example.com` as Member in the same `Commonplace Demo` workspace. Use the value you set as both passwords. Demo accounts are for local evaluation only; do not enable them on a public production deployment.
+Open:
+- Frontend: http://localhost:3000
+- API health: http://localhost:4000/health
 
-For development without Compose, install dependencies in the project root and `api/`, copy `.env.example` to `.env`, export its values with `set -a; source .env; set +a`, then run the API's `npm run db:migrate`, `npm run dev`, and the web app's `npm run dev` in separate terminals.
+### 3) Run manually without Docker
 
-## Architecture and security
+Install dependencies:
 
-```mermaid
-erDiagram
-	USER ||--o{ MEMBERSHIP : joins
-	WORKSPACE ||--o{ MEMBERSHIP : contains
-	WORKSPACE ||--o{ BOARD : owns
-	BOARD ||--o{ TASK_LIST : contains
-	TASK_LIST ||--o{ TASK : contains
-	USER o|--o{ TASK : assigned
-	WORKSPACE ||--o{ ACTIVITY : records
-	USER ||--o{ REFRESH_SESSION : owns
+```bash
+npm install
+cd api && npm install && cd ..
 ```
 
-Every membership is keyed by `(workspaceId, userId)`. Boards, lists, and tasks carry the workspace ID, and child-to-parent relations use composite keys so a child cannot point at a parent in another tenant. API lookups are additionally scoped to the authenticated workspace membership. The Prisma schema is at `api/prisma/schema.prisma`; the initial versioned migration is in `api/prisma/migrations/`.
+Then run the backend and frontend in separate terminals:
 
-Roles are `OWNER`, `ADMIN`, `MEMBER`, and `VIEWER`. A centralized policy controls reads, writes, and member administration on the server. Board sockets authenticate the access token and authorize membership before joining workspace-and-board-specific rooms.
+```bash
+cd api
+npm run db:migrate
+npm run dev
+```
 
-Access JWTs expire after 15 minutes. Refresh tokens are random, stored only in an `httpOnly` cookie (`SameSite=Lax` locally and `SameSite=None; Secure` in production for cross-origin Vercel/Render requests), and persisted as SHA-256 hashes. Rotation revokes the prior session atomically; reuse of a revoked token revokes the user's active sessions. Access tokens remain in browser memory rather than local storage.
+```bash
+npm run dev
+```
 
-Task/list positions use lexicographically sortable fractional ranks. A mutation is version-checked and committed with its activity row in PostgreSQL before broadcasting. Stale edits or ordering collisions return `409`; clients can reload and retry. Redis caches workspace counts for 30 seconds and invalidates after task/member changes; cache failures fall back to PostgreSQL. BullMQ sends invitation email asynchronously when `SMTP_URL` is configured; otherwise the invitation link remains available to copy in the UI.
+---
 
-Search is paginated and supports title/description text plus assignee, label, and status filters. Activity is paginated by cursor. Validation uses Zod and API errors do not expose stack traces.
+## Demo accounts and seed data
 
-## Commands
+To seed demo accounts for local testing:
 
-```sh
-npm run dev                 # web client, port 3000
+```bash
+export DEMO_ACCOUNT_PASSWORD="YourStrongPassword123"
+cd api
+npm run db:seed
+```
+
+This creates:
+- Email: owner.demo@example.com
+- Role: OWNER
+- Workspace: Commonplace Demo
+
+and
+- Email: member.demo@example.com
+- Role: MEMBER
+
+Use the same password value for both demo accounts.
+
+> Demo accounts are intended for local evaluation only and should not be used in public production environments.
+
+---
+
+## Working flow
+
+### 1) Sign up or sign in
+The user creates an account or logs in. The API creates a refresh-token session and returns an access token to the frontend.
+
+### 2) Workspace and board selection
+The frontend calls the workspace and board endpoints, then loads the currently selected board.
+
+### 3) Board interaction
+Users can create/edit/move lists and tasks. Each mutation is validated, checked for stale versions, and persisted in PostgreSQL.
+
+### 4) Real-time sync
+After a successful mutation, the API emits a Socket.IO event such as:
+- task:created
+- task:updated
+- task:deleted
+- list:created
+- list:updated
+
+All connected clients in the same board room receive the payload and update their local board state.
+
+### 5) Invite flow
+Owners/Admins can invite teammates. The backend generates a secure invite link and stores the invite record. When the invited user signs up, the backend links them to the workspace and assigns the requested role.
+
+### 6) Activity and search
+The app records workspace activity and supports filtered search across task title, description, assignee, label, and status.
+
+---
+
+## Validation commands
+
+```bash
+# Root app
 npm run build
 npm run lint
-(cd api && npm run dev)       # API + Socket.IO, port 4000
-(cd api && npm run build)
-(cd api && npm test)
-(cd api && RUN_INTEGRATION_TESTS=true npm test) # after exporting .env values
-(cd api && npm run db:migrate)
+
+# API
+cd api
+npm run build
+npm test
+
+# Optional full integration tests (requires env values)
+RUN_INTEGRATION_TESTS=true npm test
 ```
 
-## Current limitations
+The project already confirms the web app and API compile successfully as part of the integrated setup.
 
-The implementation covers account signup/login/refresh/logout, invited signup, member/role management, workspace discovery, board reads, task create/edit/move/delete, search, activity, summary caching, and live task broadcasts. All six API integration tests pass against local Docker Postgres/Redis. Hosted Vercel/Render deployment still requires owner-controlled hosting accounts, domain configuration, and SMTP credentials.
+---
+
+## Deployment notes
+
+The repository includes provider configuration for split deployment:
+
+- `vercel.json` deploys the Next.js frontend from the repository root.
+- `render.yaml` provisions the Render API, PostgreSQL database, and Redis key-value service.
+- `api/Dockerfile` builds and starts the Express API and applies Prisma migrations before startup.
+
+### Render backend
+
+Create a Render Blueprint from this repository or apply `render.yaml`. Set `WEB_ORIGIN` to the final Vercel URL. Render supplies `DATABASE_URL` and `REDIS_URL` from the provisioned services, and the blueprint generates `ACCESS_TOKEN_SECRET`.
+
+The API health check is:
+
+```text
+https://<render-api-domain>/health
+```
+
+### Vercel frontend
+
+Deploy the repository root as a Next.js project and set `NEXT_PUBLIC_API_URL` to the Render API URL, for example:
+
+```text
+https://<render-api-domain>
+```
+
+After the Vercel domain is known, update Render's `WEB_ORIGIN` to that exact origin and redeploy the API. This is required for browser requests, refresh cookies, and Socket.IO connections.
+
+Required production environment variables are:
+
+- DATABASE_URL
+- REDIS_URL
+- ACCESS_TOKEN_SECRET
+- WEB_ORIGIN
+- NEXT_PUBLIC_API_URL
+- SMTP_URL / SMTP_FROM
+
+### Terminal deployment
+
+Vercel can be deployed from the repository root with the Vercel CLI:
+
+```bash
+npm install --global vercel
+vercel login
+vercel --prod
+```
+
+Render Blueprints are applied from the Render dashboard or Render API. A Render API key is required for unattended terminal automation. Never commit provider tokens or production secrets to the repository.

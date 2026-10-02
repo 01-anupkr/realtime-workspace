@@ -1,0 +1,38 @@
+services:
+  - type: keyvalue
+    name: commonplace-redis
+    plan: free
+    ipAllowList: []
+
+  - type: web
+    name: commonplace-api
+    runtime: docker
+    rootDir: api
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: commonplace-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: commonplace-redis
+          property: connectionString
+      - key: ACCESS_TOKEN_SECRET
+        generateValue: true
+      - key: WEB_ORIGIN
+        sync: false
+      - key: SMTP_URL
+        sync: false
+      - key: SMTP_FROM
+        value: Commonplace <no-reply@example.com>
+
+databases:
+  - name: commonplace-postgres
+    databaseName: workspace
+    user: workspace
+    plan: free

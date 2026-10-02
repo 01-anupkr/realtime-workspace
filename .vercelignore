@@ -1,0 +1,7 @@
+api
+api/**
+node_modules
+.next
+.git
+out
+render.yaml

@@ -14,6 +14,7 @@ import { z } from "zod";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { canAssignRole, canManageMember, hasPermission, type Permission, type WorkspaceRole } from "./policy.js";
 import { rankBetween } from "./rank.js";
+import { boardRoom, syncBoardRoom } from "./socketRooms.js";
 
 const prisma = new PrismaClient();
 const app = express();
@@ -828,10 +829,6 @@ app.get("/workspaces/:workspaceId/activity", authenticate, requireWorkspacePermi
   }
 });
 
-function boardRoom(workspaceId: string, boardId: string): string {
-  return `workspace:${workspaceId}:board:${boardId}`;
-}
-
 function userSocketRoom(userId: string): string {
   return `user:${userId}`;
 }
@@ -854,11 +851,13 @@ io.use((socket, next) => {
 
 io.on("connection", (socket) => {
   void socket.join(userSocketRoom(socket.data.userId as string));
+
   socket.on("board:join", async (payload: { workspaceId?: string; boardId?: string }, callback?: (result: { ok: boolean; error?: string }) => void) => {
     if (!payload?.workspaceId || !payload.boardId) {
       callback?.({ ok: false, error: "Workspace and board are required" });
       return;
     }
+
     const membership = await prisma.membership.findUnique({
       where: { workspaceId_userId: { workspaceId: payload.workspaceId, userId: socket.data.userId as string } },
     }).catch(() => null);
@@ -867,8 +866,23 @@ io.on("connection", (socket) => {
       callback?.({ ok: false, error: "Board not found" });
       return;
     }
-    await socket.join(boardRoom(payload.workspaceId, payload.boardId));
+
+    const room = await syncBoardRoom(socket, payload.workspaceId, payload.boardId);
+    if (room !== boardRoom(payload.workspaceId, payload.boardId)) {
+      callback?.({ ok: false, error: "Board room could not be joined" });
+      return;
+    }
+
     callback?.({ ok: true });
+  });
+
+  socket.on("board:leave", async (payload: { workspaceId?: string; boardId?: string }) => {
+    if (!payload?.workspaceId || !payload.boardId) return;
+    const room = boardRoom(payload.workspaceId, payload.boardId);
+    if (socket.data.currentBoardRoom === room) {
+      delete socket.data.currentBoardRoom;
+    }
+    await socket.leave(room);
   });
 });
 

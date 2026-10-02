@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { io } from "socket.io-client";
+import { io, type Socket } from "socket.io-client";
 import {
   Activity, Check, ChevronLeft, ChevronRight, CircleHelp, Clipboard, Columns3,
   Filter, LayoutGrid, LoaderCircle, LogOut, Plus, Search, Sparkles, Wifi, WifiOff, X,
@@ -92,6 +92,7 @@ export default function Home() {
   const [newListTitle, setNewListTitle] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -177,23 +178,57 @@ export default function Home() {
   }, [token, workspaceId, boardId]);
 
   useEffect(() => {
-    const boardId = board?.id;
-    if (!token || !boardId || !workspaceId) return;
-    const socket = io(apiUrl, { auth: { token }, reconnection: true, withCredentials: true });
-    socket.on("connect", () => {
-      setOnline(true);
-      socket.emit("board:join", { workspaceId, boardId });
-    });
-    socket.on("disconnect", () => setOnline(false));
-    socket.on("task:created", (task: Task) => setBoard((current) => mergeTask(current, task)));
-    socket.on("task:updated", (task: Task) => setBoard((current) => mergeTask(current, task)));
-    socket.on("list:created", (list: List) => setBoard((current) => mergeList(current, list)));
-    socket.on("list:updated", (list: List) => setBoard((current) => mergeList(current, list)));
-    socket.on("task:deleted", ({ id }: { id: string }) => setBoard((current) => current ? ({
-      ...current, lists: current.lists.map((list) => ({ ...list, tasks: list.tasks.filter((task) => task.id !== id) })),
-    }) : current));
-    return () => { socket.disconnect(); setOnline(false); };
-  }, [token, board?.id, workspaceId]);
+    if (!token) {
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+      return;
+    }
+
+    if (!socketRef.current) {
+      const socket = io(apiUrl, { auth: { token }, reconnection: true, withCredentials: true });
+      socketRef.current = socket;
+      socket.on("connect", () => setOnline(true));
+      socket.on("disconnect", () => setOnline(false));
+      socket.on("task:created", (task: Task) => setBoard((current) => mergeTask(current, task)));
+      socket.on("task:updated", (task: Task) => setBoard((current) => mergeTask(current, task)));
+      socket.on("list:created", (list: List) => setBoard((current) => mergeList(current, list)));
+      socket.on("list:updated", (list: List) => setBoard((current) => mergeList(current, list)));
+      socket.on("task:deleted", ({ id }: { id: string }) => setBoard((current) => current ? ({
+        ...current, lists: current.lists.map((list) => ({ ...list, tasks: list.tasks.filter((task) => task.id !== id) })),
+      }) : current));
+    }
+  }, [token]);
+
+  useEffect(() => {
+    return () => {
+      socketRef.current?.disconnect();
+      socketRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!token || !workspaceId || !board?.id) return;
+    const socket = socketRef.current;
+    if (!socket) return;
+
+    const joinBoard = () => {
+      socket.emit("board:join", { workspaceId, boardId: board.id }, (result?: { ok?: boolean; error?: string }) => {
+        if (result && !result.ok) {
+          setError(result.error ?? "Could not join the board");
+        }
+      });
+    };
+
+    if (socket.connected) {
+      joinBoard();
+    } else {
+      socket.once("connect", joinBoard);
+    }
+
+    return () => {
+      socket.emit("board:leave", { workspaceId, boardId: board.id });
+    };
+  }, [board?.id, token, workspaceId]);
 
   useEffect(() => {
     const hasFilters = Boolean(query.trim() || filterStatus || filterAssignee || filterLabel);
