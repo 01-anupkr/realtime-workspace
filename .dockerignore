@@ -1,0 +1,10 @@
+.git
+.next
+node_modules
+api/node_modules
+api/dist
+api/**
+coverage
+.env
+.env.*
+!.env.example
