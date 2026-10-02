@@ -381,12 +381,28 @@ app.post("/workspaces/:workspaceId/boards/:boardId/lists", authenticate, require
       response.status(404).json({ error: "Board not found" });
       return;
     }
-    const created = await prisma.$transaction(async (tx) => {
-      const last = await tx.taskList.findFirst({ where: { workspaceId, boardId }, orderBy: { rank: "desc" }, select: { rank: true } });
-      const list = await tx.taskList.create({ data: { workspaceId, boardId, title: input.title, rank: rankBetween(last?.rank ?? null, null) } });
-      await tx.activity.create({ data: { workspaceId, actorId: response.locals.userId as string, action: "list.created", subjectId: list.id } });
-      return list;
-    });
+    const createList = async () =>
+      prisma.$transaction(async (tx) => {
+        const last = await tx.taskList.findFirst({ where: { workspaceId, boardId }, orderBy: { rank: "desc" }, select: { rank: true } });
+        const list = await tx.taskList.create({ data: { workspaceId, boardId, title: input.title, rank: rankBetween(last?.rank ?? null, null) } });
+        await tx.activity.create({ data: { workspaceId, actorId: response.locals.userId as string, action: "list.created", subjectId: list.id } });
+        return list;
+      });
+    let created: Awaited<ReturnType<typeof createList>> | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        created = await createList();
+        break;
+      } catch (error) {
+        if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") || attempt === 2) {
+          throw error;
+        }
+      }
+    }
+    if (!created) {
+      response.status(409).json({ error: "List order changed concurrently; reload and retry" });
+      return;
+    }
     const createdWithTasks = { ...created, tasks: [] };
     io.to(boardRoom(workspaceId, boardId)).emit("list:created", createdWithTasks);
     response.status(201).json(createdWithTasks);
