@@ -160,6 +160,7 @@ const inviteSchema = z.object({
 });
 const roleUpdateSchema = z.object({ role: z.enum(["OWNER", "ADMIN", "MEMBER", "VIEWER"]) });
 
+app.get("/", (_request, response) => response.json({ name: "Commonplace API", status: "ok", health: "/health" }));
 app.get("/health", (_request, response) => response.json({ status: "ok" }));
 
 app.post("/auth/signup", async (request, response, next) => {
