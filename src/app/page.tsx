@@ -7,7 +7,7 @@ import {
   Filter, LayoutGrid, LoaderCircle, LogOut, Plus, Search, Sparkles, Wifi, WifiOff, X,
 } from "lucide-react";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "https://api-production-4d566.up.railway.app";
 
 type TaskStatus = "TODO" | "IN_PROGRESS" | "DONE";
 type Task = {
