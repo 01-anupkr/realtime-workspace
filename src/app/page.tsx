@@ -81,6 +81,8 @@ export default function Home() {
   const [searchIds, setSearchIds] = useState<string[] | null>(null);
   const [activityOpen, setActivityOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(false);
+  const [workspaceCreateOpen, setWorkspaceCreateOpen] = useState(false);
+  const [workspaceCreatedOpen, setWorkspaceCreatedOpen] = useState(false);
   const [members, setMembers] = useState<Member[]>([]);
   const [pendingInviteToken, setPendingInviteToken] = useState("");
   const [inviteUrl, setInviteUrl] = useState("");
@@ -296,6 +298,27 @@ export default function Home() {
     }
   }
 
+  async function createWorkspace(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token) return;
+    const form = new FormData(event.currentTarget);
+    try {
+      const created = await request<{ workspaceId: string; boardId: string; workspace: Workspace }>("/workspaces", token, {
+        method: "POST",
+        body: JSON.stringify({ name: form.get("name") }),
+      });
+      setWorkspaces((current) => [...current, created.workspace]);
+      setWorkspaceId(created.workspaceId);
+      setBoardId(created.boardId);
+      setBoard(null);
+      setWorkspaceCreateOpen(false);
+      setWorkspaceCreatedOpen(true);
+      event.currentTarget.reset();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Workspace could not be created");
+    }
+  }
+
   async function changeMemberRole(member: Member, role: Member["role"]) {
     if (!token) return;
     try {
@@ -460,7 +483,7 @@ export default function Home() {
     <main className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-brand"><span className="brand-mark"><Columns3 size={17} /></span><span>Commonplace</span></div>
-        <div className="workspace-switch"><span className="workspace-avatar">{(workspaces.find((item) => item.id === workspaceId)?.name ?? "W").slice(0, 1).toUpperCase()}</span><span className="workspace-name">{workspaces.find((item) => item.id === workspaceId)?.name ?? "Workspace"}<small>{workspaces.find((item) => item.id === workspaceId)?.role ?? "Workspace"}</small></span></div>
+        <button className="workspace-switch" onClick={() => setWorkspaceCreateOpen(true)} title="Create a workspace"><span className="workspace-avatar">{(workspaces.find((item) => item.id === workspaceId)?.name ?? "W").slice(0, 1).toUpperCase()}</span><span className="workspace-name">{workspaces.find((item) => item.id === workspaceId)?.name ?? "Workspace"}<small>{workspaces.find((item) => item.id === workspaceId)?.role ?? "Workspace"}</small></span><Plus size={15} /></button>
         <div className="main-nav"><div className="nav-item active"><LayoutGrid size={17} /> Boards <span>{boards.length}</span></div></div>
         <div className="side-section"><div className="section-heading"><span>YOUR BOARDS</span></div>{boards.map((item, index) => <button key={item.id} className={`side-link ${item.id === boardId ? "selected" : ""}`} onClick={() => setBoardId(item.id)}><span className={`side-square ${["green", "coral", "blue"][index % 3]}`}></span>{item.name}</button>)}</div>
         <div className="side-section list-nav-section"><div className="section-heading"><span>BOARD LISTS</span></div>{(board?.lists ?? []).map((list, index) => <button key={list.id} className={`side-link list-nav-link ${activeListId === list.id ? "selected" : ""}`} aria-current={activeListId === list.id ? "location" : undefined} onClick={() => focusList(list.id)}><span className={`side-square ${["green", "coral", "blue"][index % 3]}`}></span><span className="list-nav-title">{list.title}</span><span className="list-nav-count">{list.tasks.length}</span></button>)}</div>
@@ -498,9 +521,19 @@ export default function Home() {
       </section>
       {activityOpen && <aside className="activity-panel"><div className="panel-heading"><div><span className="panel-kicker">WORKSPACE</span><h2>Activity</h2></div><button className="icon-button" onClick={() => setActivityOpen(false)} aria-label="Close activity"><X size={18} /></button></div><div className="activity-list">{activityItems.map((item) => <div className="activity-item" key={item.id}><span className="activity-avatar">{item.actor.name.slice(0, 1)}</span><p><b>{item.actor.name}</b> {item.action.replace("task.", "task ").replaceAll(".", " ")}<small>{new Date(item.createdAt).toLocaleString()}</small></p></div>)}{activityItems.length === 0 && <p className="empty-state">No activity yet.</p>}</div></aside>}
       {membersOpen && <MembersDialog members={members} actorRole={workspaces.find((item) => item.id === workspaceId)?.role ?? "VIEWER"} currentUserId={user?.id ?? ""} inviteUrl={inviteUrl} onClose={() => setMembersOpen(false)} onInvite={inviteMember} onRoleChange={changeMemberRole} onRemove={removeMember} />}
+      {workspaceCreateOpen && <WorkspaceCreateDialog onClose={() => setWorkspaceCreateOpen(false)} onCreate={createWorkspace} />}
+      {workspaceCreatedOpen && <WorkspaceCreatedDialog workspaceName={workspaces.find((item) => item.id === workspaceId)?.name ?? "Workspace"} online={online} onClose={() => setWorkspaceCreatedOpen(false)} />}
       {selectedTask && <TaskDialog task={selectedTask} members={members} onClose={() => setSelectedTask(null)} onSave={saveTask} onDelete={deleteTask} />}
     </main>
   );
+}
+
+function WorkspaceCreateDialog({ onClose, onCreate }: { onClose: () => void; onCreate: (event: FormEvent<HTMLFormElement>) => void }) {
+  return <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="workspace-dialog"><header><div><span className="dialog-kicker">WORKSPACE SETUP</span><h2>Create a workspace</h2><p>Give your team a focused home for projects, decisions, and momentum.</p></div><button className="icon-button" onClick={onClose} aria-label="Close workspace creation"><X size={18} /></button></header><form onSubmit={onCreate}><label>Workspace name<input name="name" autoFocus placeholder="Northstar Studio" required maxLength={80} /></label><div className="workspace-dialog-grid"><span><b>Private by default</b><small>Only invited members can access it.</small></span><span><b>Ready for live work</b><small>A board and ordered lists are created automatically.</small></span></div><footer><button type="button" className="secondary-button" onClick={onClose}>Cancel</button><button type="submit" className="primary-button"><Plus size={15} /> Create workspace</button></footer></form></section></div>;
+}
+
+function WorkspaceCreatedDialog({ workspaceName, online, onClose }: { workspaceName: string; online: boolean; onClose: () => void }) {
+  return <div className="modal-backdrop"><section className="workspace-dialog simulation-dialog"><div className="simulation-orbit"><span></span><span></span><span></span><i><Wifi size={18} /></i></div><span className="dialog-kicker">REAL-TIME SIMULATION</span><h2>{workspaceName} is ready.</h2><p>Your workspace is connected to the live collaboration channel. Changes made by teammates will appear here instantly.</p><div className="simulation-events"><span><b className="event-dot green"></b><strong>Workspace channel</strong><em>Connected</em></span><span><b className="event-dot coral"></b><strong>Board events</strong><em>Listening</em></span><span><b className="event-dot blue"></b><strong>Presence sync</strong><em>{online ? "Live now" : "Connecting"}</em></span></div><button className="primary-button simulation-continue" onClick={onClose}>Open workspace <ChevronRight size={16} /></button></section></div>;
 }
 
 function MembersDialog({ members, actorRole, currentUserId, inviteUrl, onClose, onInvite, onRoleChange, onRemove }: {

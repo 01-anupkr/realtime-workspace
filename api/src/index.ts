@@ -147,6 +147,7 @@ const taskUpdateSchema = z.object({
   nextId: z.string().min(1).nullable().optional(),
 });
 const listCreateSchema = z.object({ title: z.string().trim().min(1).max(80) });
+const workspaceCreateSchema = z.object({ name: z.string().trim().min(1).max(80) });
 const listUpdateSchema = z.object({
   version: z.number().int().positive(),
   title: z.string().trim().min(1).max(80).optional(),
@@ -316,6 +317,26 @@ app.get("/workspaces", authenticate, async (_request, response, next) => {
       select: { role: true, workspace: { select: { id: true, name: true } } },
     });
     response.json(workspaces.map(({ workspace, role }) => ({ ...workspace, role })));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/workspaces", authenticate, async (request, response, next) => {
+  try {
+    const input = workspaceCreateSchema.parse(request.body);
+    const created = await prisma.$transaction(async (tx) => {
+      const workspace = await tx.workspace.create({ data: { name: input.name } });
+      await tx.membership.create({ data: { workspaceId: workspace.id, userId: response.locals.userId as string, role: "OWNER" } });
+      const board = await tx.board.create({ data: { workspaceId: workspace.id, name: "Product board" } });
+      let previousRank: string | null = null;
+      for (const title of ["To do", "In progress", "Done"]) {
+        previousRank = rankBetween(previousRank, null);
+        await tx.taskList.create({ data: { workspaceId: workspace.id, boardId: board.id, title, rank: previousRank } });
+      }
+      return { workspace, board };
+    });
+    response.status(201).json({ workspaceId: created.workspace.id, boardId: created.board.id, workspace: { ...created.workspace, role: "OWNER" }, board: created.board });
   } catch (error) {
     next(error);
   }

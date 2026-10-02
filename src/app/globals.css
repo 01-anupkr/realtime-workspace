@@ -75,6 +75,7 @@ button:disabled { cursor: wait; opacity: .65; }
 .sidebar-brand .brand-mark { width: 26px; height: 26px; border-radius: 7px; }
 .sidebar-toggle { margin-left: auto; }
 .workspace-switch { display: flex; width: 100%; min-height: 54px; align-items: center; gap: 9px; padding: 7px; border: 1px solid #e0e7e0; border-radius: 6px; background: #fff; text-align: left; cursor: pointer; }
+.workspace-switch:hover { border-color: #b9cdbc; background: #f9fcf8; }
 .workspace-avatar { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border-radius: 5px; color: #fff; background: #698e79; font-family: Georgia, serif; font-size: 14px; }
 .workspace-name, .profile-meta { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 3px; overflow: hidden; font-size: 11px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .workspace-name small, .profile-meta small { overflow: hidden; color: #8b968f; font-size: 10px; font-weight: 400; text-overflow: ellipsis; }
@@ -235,6 +236,37 @@ button:disabled { cursor: wait; opacity: .65; }
 .delete-button { height: 33px; padding: 0 8px; border: 0; color: #aa5945; background: transparent; font-size: 10px; cursor: pointer; }
 .delete-button:hover { color: #853b29; background: #fff4f0; }
 .task-dialog .secondary-button, .task-dialog .primary-button { height: 33px; }
+.workspace-dialog { width: min(100%, 510px); padding: 25px; border: 1px solid #dfe8df; border-radius: 10px; background: #fff; box-shadow: 0 28px 80px rgba(15,35,24,.24); }
+.workspace-dialog header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+.workspace-dialog h2 { margin: 7px 0 8px; color: #24352b; font-family: Georgia, serif; font-size: 29px; font-weight: 400; }
+.workspace-dialog header p { max-width: 380px; margin: 0; color: #758178; font-size: 11px; line-height: 1.65; }
+.workspace-dialog form { margin-top: 24px; }
+.workspace-dialog label { display: block; color: #59675e; font-size: 10px; font-weight: 700; }
+.workspace-dialog label input { display: block; width: 100%; height: 43px; margin-top: 8px; padding: 0 12px; border: 1px solid #d5e0d5; border-radius: 6px; color: #34453a; background: #fbfdfb; font-size: 12px; outline: 0; }
+.workspace-dialog label input:focus { border-color: #78a07f; box-shadow: 0 0 0 3px rgba(111,158,119,.14); }
+.workspace-dialog-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 17px; }
+.workspace-dialog-grid span { display: flex; min-height: 68px; flex-direction: column; gap: 6px; padding: 12px; border: 1px solid #e5ece5; border-radius: 6px; background: #f8fbf7; }
+.workspace-dialog-grid b { color: #3b5543; font-size: 10px; }
+.workspace-dialog-grid small { color: #87948b; font-size: 9px; line-height: 1.45; }
+.workspace-dialog footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 25px; padding-top: 16px; border-top: 1px solid #e8eee8; }
+.workspace-dialog footer .primary-button, .workspace-dialog footer .secondary-button { height: 36px; }
+.simulation-dialog { text-align: center; }
+.simulation-dialog > p { max-width: 365px; margin: 0 auto; color: #758178; font-size: 11px; line-height: 1.7; }
+.simulation-orbit { position: relative; display: grid; width: 66px; height: 66px; place-items: center; margin: 0 auto 19px; border: 1px solid #d6e6d5; border-radius: 50%; background: #f4faf3; }
+.simulation-orbit i { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 50%; color: #3f7850; background: #dcebdc; font-style: normal; }
+.simulation-orbit span { position: absolute; width: 7px; height: 7px; border-radius: 50%; }
+.simulation-orbit span:first-child { top: 3px; left: 28px; background: #76a77e; }
+.simulation-orbit span:nth-child(2) { right: 6px; bottom: 14px; background: #e58e72; }
+.simulation-orbit span:nth-child(3) { bottom: 8px; left: 12px; background: #7a9faf; }
+.simulation-events { display: grid; gap: 7px; margin: 22px 0; text-align: left; }
+.simulation-events span { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border: 1px solid #e8eee8; border-radius: 6px; background: #fbfdfb; }
+.simulation-events strong { flex: 1; color: #46574c; font-size: 10px; font-weight: 650; }
+.simulation-events em { color: #6c9272; font-size: 9px; font-style: normal; }
+.event-dot { width: 7px; height: 7px; border-radius: 50%; }
+.event-dot.green { background: #71a17a; }
+.event-dot.coral { background: #e59176; }
+.event-dot.blue { background: #7da1b0; }
+.simulation-continue { width: 100%; justify-content: center; }
 
 @media (max-width: 1100px) {
 	.activity-panel { position: fixed; z-index: 5; top: 55px; right: 0; bottom: 0; width: 310px; box-shadow: -10px 0 30px rgba(23,43,31,.08); }
@@ -318,6 +350,8 @@ button:disabled { cursor: wait; opacity: .65; }
 	.invite-form label:first-child { grid-column: 1 / -1; }
 	.invite-form .primary-button { height: 35px; padding: 0 8px; font-size: 10px; }
 	.members-dialog { padding: 15px; }
+	.workspace-dialog { padding: 18px; }
+	.workspace-dialog-grid { grid-template-columns: 1fr; }
 	.member-row { gap: 6px; }
 	.member-row select, .member-role { width: 88px; min-width: 88px; }
 	.remove-member { width: 25px; flex-basis: 25px; }
