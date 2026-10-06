@@ -240,28 +240,28 @@ The project already confirms the web app and API compile successfully as part of
 The repository includes provider configuration for split deployment:
 
 - `vercel.json` deploys the Next.js frontend from the repository root.
-- `render.yaml` provisions the Render API, PostgreSQL database, and Redis key-value service.
+- `api/railway.json` configures the Railway API service health check and Docker deployment.
 - `api/Dockerfile` builds and starts the Express API and applies Prisma migrations before startup.
 
-### Render backend
+### Railway backend
 
-Create a Render Blueprint from this repository or apply `render.yaml`. Set `WEB_ORIGIN` to the final Vercel URL. Render supplies `DATABASE_URL` and `REDIS_URL` from the provisioned services, and the blueprint generates `ACCESS_TOKEN_SECRET`.
+Create a Railway service from this repository and set its service root directory to `api`. Railway will use `api/railway.json` and `api/Dockerfile` to build the API. Add Railway PostgreSQL and Redis services, then provide their connection strings to the API service. Set `WEB_ORIGIN` to the final Vercel URL and generate a random `ACCESS_TOKEN_SECRET`.
 
 The API health check is:
 
 ```text
-https://<render-api-domain>/health
+https://<railway-api-domain>/health
 ```
 
 ### Vercel frontend
 
-Deploy the repository root as a Next.js project and set `NEXT_PUBLIC_API_URL` to the Render API URL, for example:
+Deploy the repository root as a Next.js project and set `NEXT_PUBLIC_API_URL` to the Railway API URL, for example:
 
 ```text
-https://<render-api-domain>
+https://<railway-api-domain>
 ```
 
-After the Vercel domain is known, update Render's `WEB_ORIGIN` to that exact origin and redeploy the API. This is required for browser requests, refresh cookies, and Socket.IO connections.
+After the Vercel domain is known, update Railway's `WEB_ORIGIN` to that exact origin and redeploy the API. This is required for browser requests, refresh cookies, and Socket.IO connections.
 
 Required production environment variables are:
 
@@ -282,4 +282,4 @@ vercel login
 vercel --prod
 ```
 
-Render Blueprints are applied from the Render dashboard or Render API. A Render API key is required for unattended terminal automation. Never commit provider tokens or production secrets to the repository.
+Railway deployments can be triggered from the Railway dashboard or Railway CLI. Never commit provider tokens or production secrets to the repository.
